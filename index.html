@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>しりとり AI 対戦</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 600px;
+    padding: 20px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #f093fb, #f5576c, #fda085);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #aaa;
+    margin-bottom: 24px;
+    font-size: 0.9rem;
+  }
+
+  .score-bar {
+    display: flex;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+  }
+
+  .score-bar span { color: #aaa; }
+  .score-bar strong { color: #f5576c; font-size: 1.2rem; }
+
+  .timer-bar-wrap {
+    background: rgba(255,255,255,0.1);
+    border-radius: 99px;
+    height: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  #timer-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #43e97b, #38f9d7);
+    border-radius: 99px;
+    transition: width 0.2s linear, background 0.5s;
+    width: 100%;
+  }
+
+  #timer-bar.danger { background: linear-gradient(90deg, #f5576c, #f093fb); }
+
+  .chat-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 16px;
+    height: 320px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth;
+  }
+
+  .chat-box::-webkit-scrollbar { width: 4px; }
+  .chat-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+  .bubble {
+    max-width: 75%;
+    padding: 10px 16px;
+    border-radius: 18px;
+    font-size: 1.3rem;
+    font-weight: bold;
+    animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+  }
+
+  @keyframes pop {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
+  .bubble.player {
+    background: linear-gradient(135deg, #f093fb, #f5576c);
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+
+  .bubble.ai {
+    background: linear-gradient(135deg, #4facfe, #00f2fe);
+    color: #000;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble.system {
+    background: rgba(255,255,255,0.08);
+    color: #ccc;
+    align-self: center;
+    font-size: 0.85rem;
+    font-weight: normal;
+    border-radius: 10px;
+  }
+
+  .bubble .label {
+    font-size: 0.6rem;
+    font-weight: normal;
+    opacity: 0.7;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .input-area {
+    display: flex;
+    gap: 10px;
+  }
+
+  #word-input {
+    flex: 1;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 2px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.07);
+    color: #fff;
+    font-size: 1.2rem;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+  }
+
+  #word-input:focus { border-color: #f5576c; }
+  #word-input::placeholder { color: rgba(255,255,255,0.3); }
+  #word-input:disabled { opacity: 0.4; }
+
+  #send-btn {
+    padding: 14px 22px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #f093fb, #f5576c);
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+    font-family: inherit;
+  }
+
+  #send-btn:hover:not(:disabled) { transform: scale(1.05); }
+  #send-btn:active:not(:disabled) { transform: scale(0.97); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hint {
+    text-align: center;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.8rem;
+    margin-top: 10px;
+  }
+
+  #hint-char {
+    color: #fda085;
+    font-weight: bold;
+    font-size: 1rem;
+  }
+
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+
+  .overlay.show { display: flex; }
+
+  .result-card {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    animation: pop 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    max-width: 340px;
+    width: 90%;
+  }
+
+  .result-card .emoji { font-size: 4rem; margin-bottom: 12px; }
+  .result-card h2 { font-size: 2rem; margin-bottom: 8px; }
+  .result-card p { color: #aaa; margin-bottom: 24px; }
+
+  .result-card button {
+    padding: 14px 32px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #f093fb, #f5576c);
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    transition: transform 0.1s;
+  }
+
+  .result-card button:hover { transform: scale(1.05); }
+
+  .used-words {
+    margin-top: 14px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 0.8rem;
+    color: #888;
+    line-height: 1.8;
+  }
+
+  .used-words strong { color: #aaa; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔤 しりとり</h1>
+  <p class="subtitle">AI と対戦しよう！「ん」で終わったら負け。制限時間内に答えてね。</p>
+
+  <div class="score-bar">
+    <div>ターン <strong id="turn-count">1</strong></div>
+    <div>残り時間 <strong id="timer-sec">10</strong>s</div>
+    <div>最高記録 <strong id="best-score">0</strong></div>
+  </div>
+
+  <div class="timer-bar-wrap">
+    <div id="timer-bar"></div>
+  </div>
+
+  <div class="chat-box" id="chat-box"></div>
+
+  <div class="input-area">
+    <input type="text" id="word-input" placeholder="ひらがなで入力…" autocomplete="off" />
+    <button id="send-btn">送る</button>
+  </div>
+
+  <p class="hint">「<span id="hint-char">？</span>」から始まる言葉を入力してね</p>
+
+  <div class="used-words" id="used-words-box">
+    <strong>使った言葉：</strong><span id="used-list">—</span>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="result-card">
+    <div class="emoji" id="result-emoji">😵</div>
+    <h2 id="result-title">ゲームオーバー</h2>
+    <p id="result-msg">10ターン続いた！</p>
+    <button onclick="restartGame()">もう一度！</button>
+  </div>
+</div>
+
+<script>
+// ---- AI の単語リスト（カタカナ→ひらがな対応、末尾「ん」なし）----
+const AI_WORDS = [
+  "りんご","ごりら","らくだ","だちょう","うさぎ","ぎたー","たぬき","きつね","ねこ","こあら",
+  "らいおん","んご",// 使わない
+  "あいすくりーむ","むらさき","きのこ","こうもり","りす","すいか","かめ","めだか",
+  "かぶとむし","しまうま","まぐろ","ろけっと","とかげ","げんき","きりん","んー",
+  "あり","りぼん","んびき",
+  "ぱんだ","だるま","まつり","りょかん","んてい",
+  "いるか","かばん","んとう",
+  "うみうし","しおから","らっぱ","ぱいなっぷる","るびー","びーる","るーれっと","とんぼ",
+  "ぼたん","んじゃ",
+  "えのき","きゃべつ","つくし","しろくま","まぼろし","しんかんせん",
+  "あぼかど","どんぐり","りんぐ","ぐらす","すてーき","きゅうり","りんほ",
+  "おたまじゃくし","しちりん","んが",
+  "あんこう","うどん","んが",
+  "えびふらい","いのしし","しそ","そば","ばなな",
+  "なまけもの","のびる","るこら","らべんだー","だーつ","つばめ","めいろ","ろでお",
+  "おかめ","めろん","んご",
+  "ふくろう","うにく","くらげ","げっし","しか","かに","にんじん",
+  "じてんしゃ","やぎ","ぎんか","かるた","たい","いちご","ごま","まめ",
+  "めんたいこ","こんぶ","ぶどう","うなぎ","ぎょうざ","ざりがに","にわとり",
+  "りょうり","りす","すもも","もみじ","じゃんぐる","るーれっと",
+  "あおむし","しんぶん","んが",
+  "えだまめ","めじろ","ろうそく","くじら","らーめん",
+  "おむれつ","つばき","きーぼーど","どらごん","んく",
+  "かたつむり","りゅう","うたげ","げーむ","むぎちゃ","ちゃわん",
+  "わにわに","にんにく","くるみ","みかん","んく",
+  "さけ","けむし","しおん","んが",
+  "ぞう","うーる","るーぷ","ぷろぐらむ","むくどり","りえき",
+  "ひつじ","じーんず","ずっきーに","にほんご","ごまだれ",
+  "ふうせん","んが",
+];
+
+function getReading(word) {
+  // 末尾の文字（長音符「ー」は前の母音に対応、簡略化して無視）
+  return word.replace(/ー$/, '').slice(-1);
+}
+
+const LONG_VOWEL = { 'あ':'あ','い':'い','う':'う','え':'え','お':'お',
+  'か':'あ','き':'い','く':'う','け':'え','こ':'お',
+  'さ':'あ','し':'い','す':'う','せ':'え','そ':'お',
+  'た':'あ','ち':'い','つ':'う','て':'え','と':'お',
+  'な':'あ','に':'い','ぬ':'う','ね':'え','の':'お',
+  'は':'あ','ひ':'い','ふ':'う','へ':'え','ほ':'お',
+  'ま':'あ','み':'い','む':'う','め':'え','も':'お',
+  'や':'あ','ゆ':'う','よ':'お',
+  'ら':'あ','り':'い','る':'う','れ':'え','ろ':'お',
+  'わ':'あ','を':'お','ん':'ん',
+  'が':'あ','ぎ':'い','ぐ':'う','げ':'え','ご':'お',
+  'ざ':'あ','じ':'い','ず':'う','ぜ':'え','ぞ':'お',
+  'だ':'あ','ぢ':'い','づ':'う','で':'え','ど':'お',
+  'ば':'あ','び':'い','ぶ':'う','べ':'え','ぼ':'お',
+  'ぱ':'あ','ぴ':'い','ぷ':'う','ぺ':'え','ぽ':'お',
+};
+
+// 小文字→大文字変換
+const SMALL_TO_LARGE = {
+  'ぁ':'あ','ぃ':'い','ぅ':'う','ぇ':'え','ぉ':'お',
+  'っ':'つ','ゃ':'や','ゅ':'ゆ','ょ':'よ','ゎ':'わ',
+};
+
+function lastChar(word) {
+  let ch = word.slice(-1);
+  if (ch === 'ー') {
+    // 長音符は前の文字の母音
+    const prev = word.slice(-2, -1);
+    ch = LONG_VOWEL[prev] || prev;
+  }
+  return SMALL_TO_LARGE[ch] || ch;
+}
+
+const HIRAGANA_RE = /^[ぁ-ん]+$/;
+
+let usedWords = new Set();
+let currentChar = '';
+let timerInterval = null;
+let timeLeft = 10;
+let turnCount = 0;
+let bestScore = 0;
+let gameOver = false;
+
+function addBubble(text, who) {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = `bubble ${who}`;
+  const label = who === 'player' ? 'あなた' : who === 'ai' ? 'AI' : '';
+  div.innerHTML = label ? `<span class="label">${label}</span>${text}` : text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateHint(char) {
+  document.getElementById('hint-char').textContent = char || '？';
+}
+
+function updateUsed() {
+  const arr = [...usedWords];
+  document.getElementById('used-list').textContent = arr.join('　') || '—';
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timeLeft = 10;
+  document.getElementById('timer-bar').style.width = '100%';
+  document.getElementById('timer-bar').classList.remove('danger');
+  document.getElementById('timer-sec').textContent = timeLeft;
+
+  timerInterval = setInterval(() => {
+    timeLeft -= 0.1;
+    const pct = Math.max(0, timeLeft / 10 * 100);
+    document.getElementById('timer-bar').style.width = pct + '%';
+    document.getElementById('timer-sec').textContent = Math.ceil(timeLeft);
+    if (timeLeft <= 3) document.getElementById('timer-bar').classList.add('danger');
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      endGame(false, 'タイムアップ！時間切れです。');
+    }
+  }, 100);
+}
+
+function aiTurn(startChar) {
+  // startChar から始まる未使用の単語を探す
+  const candidates = AI_WORDS.filter(w =>
+    w[0] === startChar && !usedWords.has(w) && lastChar(w) !== 'ん'
+  );
+
+  if (candidates.length === 0) {
+    // AI が言葉を見つけられない
+    setTimeout(() => {
+      addBubble('うーん…思い浮かばない！あなたの勝ち🎉', 'ai');
+      endGame(true, `${turnCount}ターン続いた！`);
+    }, 800);
+    return;
+  }
+
+  const word = candidates[Math.floor(Math.random() * candidates.length)];
+  usedWords.add(word);
+  updateUsed();
+
+  setTimeout(() => {
+    addBubble(word, 'ai');
+    const next = lastChar(word);
+    currentChar = next;
+    updateHint(next);
+    turnCount++;
+    document.getElementById('turn-count').textContent = turnCount;
+
+    if (next === 'ん') {
+      setTimeout(() => endGame(true, 'AIが「ん」で終わった！あなたの勝ち！'), 400);
+      return;
+    }
+
+    document.getElementById('word-input').disabled = false;
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('word-input').focus();
+    startTimer();
+  }, 700 + Math.random() * 600);
+}
+
+function submitWord() {
+  if (gameOver) return;
+  const input = document.getElementById('word-input');
+  const word = input.value.trim();
+  input.value = '';
+
+  if (!HIRAGANA_RE.test(word)) {
+    addBubble('ひらがなで入力してください', 'system');
+    return;
+  }
+  if (word.length < 2) {
+    addBubble('2文字以上入力してください', 'system');
+    return;
+  }
+  if (word[0] !== currentChar) {
+    addBubble(`「${currentChar}」から始まる言葉を入力してください`, 'system');
+    return;
+  }
+  if (usedWords.has(word)) {
+    addBubble('その言葉はもう使われました！', 'system');
+    return;
+  }
+
+  clearInterval(timerInterval);
+
+  const end = lastChar(word);
+  usedWords.add(word);
+  updateUsed();
+  addBubble(word, 'player');
+
+  if (end === 'ん') {
+    setTimeout(() => endGame(false, '「ん」で終わってしまった！'), 400);
+    return;
+  }
+
+  document.getElementById('word-input').disabled = true;
+  document.getElementById('send-btn').disabled = true;
+  currentChar = end;
+  aiTurn(end);
+}
+
+function endGame(win, msg) {
+  gameOver = true;
+  clearInterval(timerInterval);
+  document.getElementById('word-input').disabled = true;
+  document.getElementById('send-btn').disabled = true;
+
+  if (turnCount > bestScore) {
+    bestScore = turnCount;
+    document.getElementById('best-score').textContent = bestScore;
+  }
+
+  document.getElementById('result-emoji').textContent = win ? '🎉' : '😵';
+  document.getElementById('result-title').textContent = win ? 'あなたの勝ち！' : 'ゲームオーバー';
+  document.getElementById('result-msg').textContent = msg + `（${turnCount}ターン）`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function restartGame() {
+  usedWords = new Set();
+  turnCount = 0;
+  gameOver = false;
+  currentChar = '';
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('chat-box').innerHTML = '';
+  document.getElementById('used-list').textContent = '—';
+  document.getElementById('turn-count').textContent = '1';
+  document.getElementById('word-input').disabled = true;
+  document.getElementById('send-btn').disabled = true;
+  initGame();
+}
+
+function initGame() {
+  // AIが最初の言葉を言う
+  const starters = AI_WORDS.filter(w => lastChar(w) !== 'ん' && w.length >= 3);
+  const first = starters[Math.floor(Math.random() * starters.length)];
+  usedWords.add(first);
+  updateUsed();
+
+  setTimeout(() => {
+    addBubble('最初はぼくから！', 'system');
+    setTimeout(() => {
+      addBubble(first, 'ai');
+      const next = lastChar(first);
+      currentChar = next;
+      updateHint(next);
+      turnCount++;
+      document.getElementById('turn-count').textContent = turnCount;
+      document.getElementById('word-input').disabled = false;
+      document.getElementById('send-btn').disabled = false;
+      document.getElementById('word-input').focus();
+      startTimer();
+    }, 600);
+  }, 300);
+}
+
+// イベント
+document.getElementById('send-btn').addEventListener('click', submitWord);
+document.getElementById('word-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitWord();
+});
+
+// 起動
+initGame();
+</script>
+</body>
+</html>
